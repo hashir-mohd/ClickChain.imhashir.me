@@ -16,11 +16,13 @@ const formatDurationForNode = (microseconds: number): string => {
 };
 
 const SpanNode: React.FC<SpanNodeProps> = ({ span, isLongest, onClick, onHover }) => {
-  const isError = span.tags.error === true || span.tags['otel.status_code'] === 'ERROR';
+  const isError = span.tags.error === true || 
+                  String(span.tags.error).toLowerCase() === 'true' || 
+                  span.tags['otel.status_code'] === 'ERROR';
   
-  let bgColor = 'bg-[var(--clay-bg)]'; // Base clay background
+  let bgColor = 'bg-[var(--clay-bg)]';
   let textColor = 'text-[var(--clay-text)]';
-  let accentColor = 'border-[var(--clay-accent-info)]'; // Default accent
+  let accentColor = 'border-[var(--clay-accent-info)]'; 
   let iconColor = 'text-[var(--clay-accent-info)]';
   let iconSvg = (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-4 h-4 mr-2 flex-shrink-0 ${iconColor} opacity-80`}>
@@ -46,27 +48,42 @@ const SpanNode: React.FC<SpanNodeProps> = ({ span, isLongest, onClick, onHover }
     );
   }
 
+  // itemVariants for individual SpanNode animation, independent of parent staggering
   const itemVariants = {
-    hidden: { opacity: 0, scale: 0.85, y: 15 },
-    visible: { opacity: 1, scale: 1, y: 0, transition: { type: "spring", stiffness: 130, damping: 14 } },
+    // hidden and visible states are now defined in TraceTimeline.tsx for staggering.
+    // If specific animations are needed for SpanNode itself beyond what TraceTimeline applies, define them here.
+    // For now, relying on parent's staggered animation.
+  };
+
+  const getFormattedStartTime = (ms: number): string => {
+    const date = new Date(ms);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    const milliseconds = date.getMilliseconds().toString().padStart(3, '0');
+    return `${hours}:${minutes}:${seconds}.${milliseconds}`;
   };
 
   return (
     <motion.div
-      variants={itemVariants}
+      // variants={itemVariants} // Using parent's variants for staggered entry
       whileHover={{ y: -3, scale:1.02, boxShadow: "-5px -5px 10px var(--clay-shadow-light), 5px 5px 10px var(--clay-shadow-dark)" }}
       whileTap={{ scale: 0.98, boxShadow: "var(--clay-shadow-inset-sm)" }}
-      className={`p-3.5 rounded-xl cursor-pointer min-w-[200px] max-w-[300px] flex-shrink-0 clay-element clay-element-sm-shadow border-l-4 ${accentColor} ${bgColor} ${textColor}`}
+      className={`p-3.5 rounded-xl cursor-pointer min-w-[200px] max-w-full sm:max-w-[calc(100%-1rem)] md:max-w-[300px] flex-shrink-0 clay-element clay-element-sm-shadow border-l-4 ${accentColor} ${bgColor} ${textColor}`}
       onClick={onClick}
       onMouseEnter={(e) => onHover(span, e)}
       onMouseLeave={() => onHover(null)}
-      title={`${span.operationName}\nDuration: ${formatDurationForNode(span.duration)}\nStart Time: ${new Date(span.startTime).toLocaleTimeString()}`}
+      title={`${span.operationName}\nDuration: ${formatDurationForNode(span.duration)}\nStart Time: ${getFormattedStartTime(span.startTime)}`}
+      role="button"
+      tabIndex={0}
+      onKeyPress={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
+      aria-label={`Span: ${span.operationName}, Duration: ${formatDurationForNode(span.duration)}`}
     >
       <div className="flex items-center text-sm font-semibold mb-1.5">
         {iconSvg}
         <span className="truncate" style={{maxWidth: 'calc(100% - 24px)'}}>{span.operationName}</span>
       </div>
-      <div className="text-xs opacity-80 text-[var(--clay-text-light)]">
+      <div className="text-xs text-[var(--clay-text)] font-medium">
         {formatDurationForNode(span.duration)}
       </div>
     </motion.div>
