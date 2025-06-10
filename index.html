@@ -1,0 +1,161 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenTelemetry Trace Visualizer - Claymorphic</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      /* Light Claymorphism (Main App) */
+      --clay-bg: #E0E5EC;
+      --clay-bg-darker: #D1D9E6;
+      --clay-text: #555B6E;
+      --clay-text-light: #828BA1;
+      --clay-shadow-light: rgba(255, 255, 255, 0.9);
+      --clay-shadow-dark: rgba(163, 177, 198, 0.7);
+      --clay-accent-primary: #89B0AE;
+      --clay-accent-primary-dark: #6D9391;
+      --clay-accent-secondary: #FFB74D;
+      --clay-accent-secondary-dark: #F5A623;
+      --clay-accent-error: #E57373;
+      --clay-accent-error-dark: #D32F2F;
+      --clay-accent-success: #81C784;
+      --clay-accent-info: #64B5F6;
+      --clay-shadow-extrude: -6px -6px 12px var(--clay-shadow-light), 6px 6px 12px var(--clay-shadow-dark);
+      --clay-shadow-extrude-sm: -3px -3px 6px var(--clay-shadow-light), 3px 3px 6px var(--clay-shadow-dark);
+      --clay-shadow-inset: inset -3px -3px 7px var(--clay-shadow-light), inset 3px 3px 7px var(--clay-shadow-dark);
+      --clay-shadow-inset-sm: inset -2px -2px 4px var(--clay-shadow-light), inset 2px 2px 4px var(--clay-shadow-dark);
+
+      /* Dark Claymorphism (Landing Page) */
+      --clay-dark-bg: #23272A; /* Deep dark grey/blue */
+      --clay-dark-element-bg: #2C2F33; /* Slightly lighter for elements */
+      --clay-dark-text-primary: #EAEAEA; /* Light grey for primary text */
+      --clay-dark-text-secondary: #A0A0A0; /* Medium grey for secondary text */
+      
+      /* Shadows for Dark Theme: Highlight is lighter, Depth is subtle */
+      --clay-dark-shadow-highlight: rgba(60, 64, 70, 0.5); /* Lighter shadow for top-left */
+      --clay-dark-shadow-depth: rgba(10, 12, 15, 0.4); /* Darker shadow for bottom-right */
+
+      --clay-dark-shadow-extrude: 
+        -5px -5px 10px var(--clay-dark-shadow-highlight), 
+         5px  5px 10px var(--clay-dark-shadow-depth);
+      --clay-dark-shadow-extrude-sm: 
+        -3px -3px 6px var(--clay-dark-shadow-highlight), 
+         3px  3px 6px var(--clay-dark-shadow-depth);
+      --clay-dark-shadow-inset: 
+        inset -3px -3px 7px var(--clay-dark-shadow-highlight), 
+        inset  3px  3px 7px var(--clay-dark-shadow-depth);
+      --clay-dark-shadow-inset-sm: 
+        inset -2px -2px 4px var(--clay-dark-shadow-highlight), 
+        inset  2px  2px 4px var(--clay-dark-shadow-depth);
+      
+      /* Vibrant Accent Colors for Dark Clay Landing Page */
+      --clay-dark-lp-accent-teal: #00DAC6;
+      --clay-dark-lp-accent-magenta: #BB86FC;
+      --clay-dark-lp-accent-amber: #FFAB00;
+      --clay-dark-lp-accent-sky-blue: #82AAFF;
+      --clay-dark-lp-accent-pink: #F06292;
+    }
+
+    body { 
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      background-color: var(--clay-bg); 
+      color: var(--clay-text);
+      transition: background-color 0.3s ease;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Custom scrollbars for Light Claymorphism (Main App) */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { 
+      background: var(--clay-bg-darker); 
+      border-radius: 10px;
+      border: 2px solid var(--clay-bg);
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #B0B8C5; }
+    ::-webkit-scrollbar-track { 
+      background: var(--clay-bg); 
+      border-radius: 10px;
+    }
+    
+    .chat-handle { cursor: move; }
+
+    /* Helper for Light clay elements */
+    .clay-element {
+      background-color: var(--clay-bg);
+      box-shadow: var(--clay-shadow-extrude);
+      border-radius: 16px;
+      transition: box-shadow 0.2s ease-out, transform 0.2s ease-out;
+    }
+    .clay-element-sm-shadow {
+      box-shadow: var(--clay-shadow-extrude-sm);
+    }
+    .clay-inset {
+      background-color: var(--clay-bg-darker);
+      box-shadow: var(--clay-shadow-inset);
+      border-radius: 12px;
+    }
+     .clay-inset-sm {
+      background-color: var(--clay-bg-darker);
+      box-shadow: var(--clay-shadow-inset-sm);
+      border-radius: 10px;
+    }
+
+    /* Landing page specific global styles (Dark Claymorphism) */
+    .landing-page-body {
+      background-color: var(--clay-dark-bg); /* Use new dark background */
+      color: var(--clay-dark-text-primary); /* Use new dark text color */
+      overflow-x: hidden;
+    }
+    .landing-page-body ::-webkit-scrollbar-thumb { 
+      background: var(--clay-dark-lp-accent-teal); 
+      border: 2px solid var(--clay-dark-element-bg);
+    }
+    .landing-page-body ::-webkit-scrollbar-thumb:hover { background: var(--clay-dark-lp-accent-magenta); }
+    .landing-page-body ::-webkit-scrollbar-track { 
+      background: var(--clay-dark-bg); 
+    }
+
+    /* Helper for Dark Clay Landing Page elements */
+    .dark-clay-lp-element {
+      background-color: var(--clay-dark-element-bg);
+      box-shadow: var(--clay-dark-shadow-extrude);
+      border-radius: 16px; /* Default large rounding for clay effect */
+      transition: box-shadow 0.2s ease-out, transform 0.2s ease-out;
+    }
+    .dark-clay-lp-element-sm-shadow {
+      box-shadow: var(--clay-dark-shadow-extrude-sm);
+    }
+    .dark-clay-lp-inset {
+      background-color: var(--clay-dark-bg); /* Or slightly different for inset */
+      box-shadow: var(--clay-dark-shadow-inset);
+      border-radius: 12px;
+    }
+
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^6.24.1",
+    "framer-motion": "https://esm.sh/framer-motion@^12.16.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <div id="root"></div>
+  <div id="landing-root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
