@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChatMessage } from '../../types';
 import { motion } from 'framer-motion';
+import MarkdownRenderer from '../MarkdownRenderer'; 
 
 interface ChatMessageBubbleProps {
   message: ChatMessage;
@@ -25,13 +26,17 @@ const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({ message }) => {
       className={`flex mb-2 ${isUser ? 'justify-end pl-8' : 'justify-start pr-8'}`}
     >
       <div 
-        className={`max-w-[85%] p-3 text-sm whitespace-pre-wrap clay-element clay-element-sm-shadow
+        className={`max-w-[85%] p-3 text-sm clay-element clay-element-sm-shadow
           ${isUser 
             ? 'bg-[var(--clay-accent-primary)] text-white rounded-br-lg rounded-tl-2xl rounded-tr-2xl rounded-bl-2xl' // User bubble specific rounding
             : 'bg-[var(--clay-bg)] text-[var(--clay-text)] rounded-bl-lg rounded-tr-2xl rounded-tl-2xl rounded-br-2xl' // Gemini bubble specific rounding
           }`}
       >
-        {message.text}
+        {isUser ? (
+          <span className="whitespace-pre-wrap">{message.text}</span>
+        ) : (
+          <MarkdownRenderer content={message.text} />
+        )}
       </div>
     </motion.div>
   );
