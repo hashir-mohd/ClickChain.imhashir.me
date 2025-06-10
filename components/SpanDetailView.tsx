@@ -136,7 +136,7 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
           <motion.div
             className="fixed inset-0 bg-[var(--clay-bg)] bg-opacity-50 backdrop-blur-xs z-[60]"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
