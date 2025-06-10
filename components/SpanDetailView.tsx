@@ -1,12 +1,11 @@
-
 import React, { useState } from 'react';
 import { Span, ApiError, GeminiResourcesResponse, GeminiFixResponse, GeminiOptimizeResponse, GeminiExplainResponse, SpanException } from '../types';
 import * as apiService from '../services/apiService';
 import Modal from './Modal'; 
 import LoadingSpinner from '../components/LoadingSpinner';
-import ErrorMessage from './ErrorMessage';
+import ErrorMessage from '../components/ErrorMessage';
 import { motion, AnimatePresence } from 'framer-motion';
-// GENERIC_OPTIMIZATION_CONTEXT import removed as it's no longer used here
+import MarkdownRenderer from './MarkdownRenderer'; 
 
 interface SpanDetailViewProps {
   span: Span | null;
@@ -66,7 +65,7 @@ const Section: React.FC<{title: string, children: React.ReactNode, defaultOpen?:
 const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, onClose }) => {
   const [geminiModalOpen, setGeminiModalOpen] = useState(false);
   const [geminiModalTitle, setGeminiModalTitle] = useState('');
-  const [geminiResponse, setGeminiResponse] = useState<string | React.ReactNode | null>(null);
+  const [geminiResponse, setGeminiResponse] = useState<React.ReactNode | null>(null); 
   const [isLoadingGemini, setIsLoadingGemini] = useState(false);
   const [geminiError, setGeminiError] = useState<ApiError | null>(null);
 
@@ -88,21 +87,21 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
       if (typeof result.links === 'object') { 
         const res = result as GeminiResourcesResponse;
         setGeminiResponse(
-          <ul className="space-y-3 list-disc list-inside text-[var(--clay-text)]">
+          <ul className="space-y-3 list-disc list-inside text-[var(--clay-text)] text-sm">
             {res.links.map(link => (
               <li key={link.link}>
                 <a href={link.link} target="_blank" rel="noopener noreferrer" className="text-[var(--clay-accent-info)] hover:underline font-medium">{link.title}</a>
-                <p className="text-xs text-[var(--clay-text-light)] ml-4">{link.snippet}</p>
+                <p className="text-xs text-[var(--clay-text-light)] ml-4">{link.snippet}</p> 
               </li>
             ))}
           </ul>
         );
       } else if (typeof result.fix === 'string') {
-        setGeminiResponse(<pre className="whitespace-pre-wrap bg-[var(--clay-bg-darker)] p-3 rounded-lg text-xs font-mono text-[var(--clay-text)] clay-inset-sm">{ (result as GeminiFixResponse).fix }</pre>);
-      } else if (typeof result.tips === 'string') { // This case will now be handled by TraceDetailPage
-        setGeminiResponse(<pre className="whitespace-pre-wrap bg-[var(--clay-bg-darker)] p-3 rounded-lg text-xs font-mono text-[var(--clay-text)] clay-inset-sm">{ (result as GeminiOptimizeResponse).tips }</pre>);
+        setGeminiResponse(<MarkdownRenderer content={(result as GeminiFixResponse).fix} />);
+      } else if (typeof result.tips === 'string') { 
+        setGeminiResponse(<MarkdownRenderer content={(result as GeminiOptimizeResponse).tips} />);
       } else if (typeof result.explanation === 'string') {
-        setGeminiResponse(<p className="whitespace-pre-wrap text-[var(--clay-text)]">{ (result as GeminiExplainResponse).explanation }</p>);
+        setGeminiResponse(<MarkdownRenderer content={(result as GeminiExplainResponse).explanation} />);
       } else {
          setGeminiResponse(<span className="text-[var(--clay-text-light)]">Received an unexpected response format.</span>);
       }
@@ -137,7 +136,7 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
           <motion.div
             className="fixed inset-0 bg-[var(--clay-bg)] bg-opacity-50 backdrop-blur-xs z-[60]"
             initial={{ opacity: 0 }}
-            animate={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
           />
@@ -255,7 +254,7 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
       <Modal isOpen={geminiModalOpen} onClose={() => setGeminiModalOpen(false)} title={geminiModalTitle} size="lg">
         {isLoadingGemini && <div className="flex justify-center p-8"><LoadingSpinner message="Consulting Gemini..." /></div>}
         {geminiError && !isLoadingGemini && <ErrorMessage error={geminiError} onClear={() => setGeminiError(null)}/>}
-        {!isLoadingGemini && !geminiError && geminiResponse && <div className="text-[var(--clay-text)]">{geminiResponse}</div>}
+        {!isLoadingGemini && !geminiError && geminiResponse && <div className="text-sm">{geminiResponse}</div>}
       </Modal>
     </>
   );

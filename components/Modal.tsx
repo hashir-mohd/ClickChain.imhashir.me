@@ -6,7 +6,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'full' | 'fullContent'; // Added 'fullContent'
 }
 
 const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md' }) => {
@@ -15,7 +15,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
-    full: 'max-w-3xl' // Max width for full to keep it reasonable
+    full: 'max-w-3xl',
+    fullContent: 'max-w-[90vw] w-[90vw]' // For very wide content like Jaeger timeline
   };
 
   const backdropVariants = {
@@ -50,10 +51,10 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
             initial="hidden"
             animate="visible"
             exit="exit"
-            className={`clay-element ${sizeClasses[size]} w-full overflow-hidden flex flex-col max-h-[85vh]`}
+            className={`clay-element ${sizeClasses[size]} w-full overflow-hidden flex flex-col max-h-[90vh]`} // Adjusted max-h
             onClick={(e) => e.stopPropagation()} 
           >
-            <div className="flex items-center justify-between p-5 border-b border-[var(--clay-bg-darker)]">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--clay-bg-darker)] shrink-0">
               <h2 className="text-xl font-semibold text-[var(--clay-text)]">{title}</h2>
               <motion.button
                 onClick={onClose}
@@ -67,7 +68,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
                 </svg>
               </motion.button>
             </div>
-            <div className="p-5 text-[var(--clay-text)] overflow-y-auto">
+            {/* The children container should be scrollable if content overflows */}
+            <div className="flex-grow overflow-auto"> 
               {children}
             </div>
           </motion.div>

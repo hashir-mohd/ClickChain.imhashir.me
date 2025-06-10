@@ -6,7 +6,8 @@ import { Service } from './types';
 // from the same origin as the backend, or a proxy is configured.
 // In a typical build setup (e.g., with Create React App or Vite), this might be
 // process.env.REACT_APP_API_URL or import.meta.env.VITE_API_URL.
-export const API_BASE_URL = 'http://localhost:3000'; // Relative to the host
+export const API_BASE_URL = import.meta.env.API_BASE_URL || 'http://localhost:3000';
+
 
 // GENERIC_OPTIMIZATION_CONTEXT removed as it's no longer used for the refactored optimization tips.
 
