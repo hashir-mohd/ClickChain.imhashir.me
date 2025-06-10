@@ -19,6 +19,7 @@ import {
 } from '../types';
 import { API_BASE_URL } from '../constants';
 
+
 // Generic API fetch helper using axios
 const fetchApi = async <TResponse>(
   path: string, // Full path e.g., /api/traces or /api/summary

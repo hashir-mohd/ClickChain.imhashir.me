@@ -1,15 +1,16 @@
-
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
-import { Span, GeminiSummaryResponse, ApiError, GeminiOptimizeResponse } from '../types';
+import { Span, GeminiSummaryResponse, ApiError, GeminiOptimizeResponse, Trace } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import Modal from '../components/Modal';
 import TraceTimeline from '../components/TraceTimeline/TraceTimeline';
 import SpanDetailView from '../components/SpanDetailView';
+import JaegerTimelineView from '../components/JaegerTimeline/JaegerTimelineView'; // New Import
 import * as apiService from '../services/apiService';
 import { motion } from 'framer-motion';
+import MarkdownRenderer from '../components/MarkdownRenderer'; 
 
 const TraceDetailPage: React.FC = () => {
   const { traceID } = useParams<{ traceID: string }>();
@@ -25,6 +26,8 @@ const TraceDetailPage: React.FC = () => {
   const [isOptimizationModalOpen, setIsOptimizationModalOpen] = useState(false);
   const [optimizationTipsData, setOptimizationTipsData] = useState<GeminiOptimizeResponse | null>(null);
   const [isFetchingOptimizationTips, setIsFetchingOptimizationTips] = useState(false);
+
+  const [isJaegerTimelineModalOpen, setIsJaegerTimelineModalOpen] = useState(false); // New state
 
   const [pageError, setPageError] = useState<ApiError | null>(null);
 
@@ -49,14 +52,14 @@ const TraceDetailPage: React.FC = () => {
   const handleGetTraceSummary = async () => {
     if (!currentTrace || isFetchingSummary || isFetchingOptimizationTips) return;
     setIsFetchingSummary(true);
-    setPageError(null); // Clear page error before new request
+    setPageError(null);
     try {
       const summary = await apiService.getTraceSummary(currentTrace);
       setSummaryData(summary);
       setIsSummaryModalOpen(true);
     } catch (err) {
       setPageError(err as ApiError);
-      setSummaryData(null); // Clear old data on error
+      setSummaryData(null);
     } finally {
       setIsFetchingSummary(false);
     }
@@ -65,17 +68,22 @@ const TraceDetailPage: React.FC = () => {
   const handleGetOptimizationTips = async () => {
     if (!currentTrace || isFetchingOptimizationTips || isFetchingSummary) return;
     setIsFetchingOptimizationTips(true);
-    setPageError(null); // Clear page error before new request
+    setPageError(null);
     try {
       const tips = await apiService.getOptimizationTips(currentTrace);
       setOptimizationTipsData(tips);
       setIsOptimizationModalOpen(true);
     } catch (err) {
       setPageError(err as ApiError);
-      setOptimizationTipsData(null); // Clear old data on error
+      setOptimizationTipsData(null);
     } finally {
       setIsFetchingOptimizationTips(false);
     }
+  };
+
+  const handleOpenJaegerTimeline = () => { // New handler
+    if (!currentTrace) return;
+    setIsJaegerTimelineModalOpen(true);
   };
   
   const pageVariants = {
@@ -94,8 +102,7 @@ const TraceDetailPage: React.FC = () => {
     return <div className="flex justify-center items-center h-64"><LoadingSpinner message="Loading trace details..." /></div>;
   }
 
-  // Show general context error if no specific modal is targeted by the error
-  const showGeneralPageError = pageError && !isSummaryModalOpen && !isOptimizationModalOpen;
+  const showGeneralPageError = pageError && !isSummaryModalOpen && !isOptimizationModalOpen && !isJaegerTimelineModalOpen;
 
   if (contextError) {
     return <ErrorMessage error={contextError} onClear={clearError} />;
@@ -121,7 +128,7 @@ const TraceDetailPage: React.FC = () => {
         <motion.p variants={itemVariants} className="text-[var(--clay-text-light)] mb-8">The trace with ID '{traceID}' could not be loaded or doesn't exist.</motion.p>
         <motion.button
           variants={itemVariants}
-          onClick={() => navigate('/app')} // Updated path
+          onClick={() => navigate('/app')}
           whileHover={{ scale: 1.05, y: -2, boxShadow: "-8px -8px 16px var(--clay-shadow-light), 8px 8px 16px var(--clay-shadow-dark)" }}
           whileTap={{ scale: 0.95, boxShadow: "var(--clay-shadow-inset)" }}
           className="px-8 py-3 bg-[var(--clay-accent-info)] text-white font-semibold clay-element clay-element-sm-shadow"
@@ -133,6 +140,8 @@ const TraceDetailPage: React.FC = () => {
   }
   
   if (!currentTrace) return null; 
+
+  const anyFetching = isFetchingSummary || isFetchingOptimizationTips;
 
   return (
     <motion.div 
@@ -148,13 +157,13 @@ const TraceDetailPage: React.FC = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-[var(--clay-text)]">Trace Detail</h1>
             <p className="text-sm text-[var(--clay-text-light)] truncate" title={currentTrace.traceID}>ID: {currentTrace.traceID}</p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-3 w-full sm:w-auto">
             <motion.button
               onClick={handleGetTraceSummary}
-              disabled={isFetchingSummary || isFetchingOptimizationTips}
-              whileHover={{ scale: 1.05, y: -2, boxShadow: (isFetchingSummary || isFetchingOptimizationTips) ? undefined : "-7px -7px 14px var(--clay-shadow-light), 7px 7px 14px var(--clay-shadow-dark)" }}
-              whileTap={{ scale: 0.95, boxShadow: (isFetchingSummary || isFetchingOptimizationTips) ? undefined : "var(--clay-shadow-inset-sm)" }}
-              className="w-full sm:w-auto px-5 py-2.5 bg-[var(--clay-accent-secondary)] text-white font-medium clay-element clay-element-sm-shadow disabled:opacity-70 disabled:bg-[var(--clay-bg-darker)] disabled:text-[var(--clay-text-light)] disabled:shadow-[var(--clay-shadow-inset)] flex items-center justify-center min-w-[200px]"
+              disabled={anyFetching}
+              whileHover={{ scale: 1.05, y: -2, boxShadow: anyFetching ? undefined : "-7px -7px 14px var(--clay-shadow-light), 7px 7px 14px var(--clay-shadow-dark)" }}
+              whileTap={{ scale: 0.95, boxShadow: anyFetching ? undefined : "var(--clay-shadow-inset-sm)" }}
+              className="w-full sm:w-auto px-5 py-2.5 bg-[var(--clay-accent-secondary)] text-white font-medium clay-element clay-element-sm-shadow disabled:opacity-70 disabled:bg-[var(--clay-bg-darker)] disabled:text-[var(--clay-text-light)] disabled:shadow-[var(--clay-shadow-inset)] flex items-center justify-center min-w-[190px]"
             >
               {isFetchingSummary ? (
                 <LoadingSpinner size="sm" colorClass='border-[var(--clay-text-light)]' /> 
@@ -164,14 +173,14 @@ const TraceDetailPage: React.FC = () => {
                   <path d="M3.5 9.25a.75.75 0 000 1.5h.383c.059.407.16.797.298 1.162A3.5 3.5 0 003.5 14.25H2.75a.75.75 0 000 1.5h.75a3.5 3.5 0 006.441-2.066A3.482 3.482 0 0010.25 12H12a2.5 2.5 0 002.5-2.5 2.5 2.5 0 00-2.5-2.5h-1.75a3.482 3.482 0 00-.309-1.316A3.5 3.5 0 006.5 3.75H3.5a.75.75 0 000 1.5h3a3.5 3.5 0 000 7H3.5z" />
                 </svg>
               )}
-              <span className={isFetchingSummary ? 'ml-2' : ''}>{isFetchingSummary ? "Fetching..." : "Get Trace Summary"}</span>
+              <span className={isFetchingSummary ? 'ml-2' : ''}>{isFetchingSummary ? "Fetching..." : "Get Summary"}</span>
             </motion.button>
             <motion.button
               onClick={handleGetOptimizationTips}
-              disabled={isFetchingOptimizationTips || isFetchingSummary}
-              whileHover={{ scale: 1.05, y: -2, boxShadow: (isFetchingOptimizationTips || isFetchingSummary) ? undefined : "-7px -7px 14px var(--clay-shadow-light), 7px 7px 14px var(--clay-shadow-dark)" }}
-              whileTap={{ scale: 0.95, boxShadow: (isFetchingOptimizationTips || isFetchingSummary) ? undefined : "var(--clay-shadow-inset-sm)" }}
-              className="w-full sm:w-auto px-5 py-2.5 bg-[var(--clay-accent-success)] text-white font-medium clay-element clay-element-sm-shadow disabled:opacity-70 disabled:bg-[var(--clay-bg-darker)] disabled:text-[var(--clay-text-light)] disabled:shadow-[var(--clay-shadow-inset)] flex items-center justify-center min-w-[200px]"
+              disabled={anyFetching}
+              whileHover={{ scale: 1.05, y: -2, boxShadow: anyFetching ? undefined : "-7px -7px 14px var(--clay-shadow-light), 7px 7px 14px var(--clay-shadow-dark)" }}
+              whileTap={{ scale: 0.95, boxShadow: anyFetching ? undefined : "var(--clay-shadow-inset-sm)" }}
+              className="w-full sm:w-auto px-5 py-2.5 bg-[var(--clay-accent-success)] text-white font-medium clay-element clay-element-sm-shadow disabled:opacity-70 disabled:bg-[var(--clay-bg-darker)] disabled:text-[var(--clay-text-light)] disabled:shadow-[var(--clay-shadow-inset)] flex items-center justify-center min-w-[190px]"
             >
               {isFetchingOptimizationTips ? (
                 <LoadingSpinner size="sm" colorClass='border-[var(--clay-text-light)]' /> 
@@ -182,7 +191,20 @@ const TraceDetailPage: React.FC = () => {
                     <path fillRule="evenodd" d="M10 2a.75.75 0 01.75.75V1a.75.75 0 010 1.5V2A.75.75 0 0110 2zM13.465 3.785a.75.75 0 10-1.06-1.06L11.5 3.25a.75.75 0 001.06 1.06l.905-.905zM3.785 6.535a.75.75 0 001.06-1.06L3.25 4.565a.75.75 0 00-1.06 1.06l.905.905zM16.215 6.535a.75.75 0 101.06-1.06l-.905-.905a.75.75 0 00-1.06 1.06l.905.905zM6.535 16.215a.75.75 0 10-1.06 1.06l.905.905a.75.75 0 001.06-1.06l-.905-.905zM17.28 13.465a.75.75 0 00-1.06 1.06l.905.905a.75.75 0 101.06-1.06l-.905-.905z" clipRule="evenodd" />
                   </svg>
               )}
-              <span className={isFetchingOptimizationTips ? 'ml-2' : ''}>{isFetchingOptimizationTips ? "Fetching..." : "Get Optimization Tips"}</span>
+              <span className={isFetchingOptimizationTips ? 'ml-2' : ''}>{isFetchingOptimizationTips ? "Fetching..." : "Get Opt. Tips"}</span>
+            </motion.button>
+             <motion.button // New Gantt View button
+              onClick={handleOpenJaegerTimeline}
+              disabled={anyFetching}
+              whileHover={{ scale: 1.05, y: -2, boxShadow: anyFetching ? undefined : "-7px -7px 14px var(--clay-shadow-light), 7px 7px 14px var(--clay-shadow-dark)" }}
+              whileTap={{ scale: 0.95, boxShadow: anyFetching ? undefined : "var(--clay-shadow-inset-sm)" }}
+              className="w-full sm:w-auto px-5 py-2.5 bg-[var(--clay-accent-info)] text-white font-medium clay-element clay-element-sm-shadow disabled:opacity-70 disabled:bg-[var(--clay-bg-darker)] disabled:text-[var(--clay-text-light)] disabled:shadow-[var(--clay-shadow-inset)] flex items-center justify-center min-w-[190px]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 mr-2">
+                <path fillRule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h13A1.5 1.5 0 0118 3.5v13a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 012 16.5v-13zM3.5 3a.5.5 0 00-.5.5v13a.5.5 0 00.5.5h13a.5.5 0 00.5-.5v-13a.5.5 0 00-.5-.5h-13z" clipRule="evenodd" />
+                <path d="M4.25 7.5a.75.75 0 01.75-.75h10a.75.75 0 010 1.5h-10a.75.75 0 01-.75-.75zM4.25 12a.75.75 0 01.75-.75h4a.75.75 0 010 1.5h-4a.75.75 0 01-.75-.75z" />
+              </svg>
+              Gantt View
             </motion.button>
           </div>
         </div>
@@ -190,7 +212,7 @@ const TraceDetailPage: React.FC = () => {
       </motion.div>
       
       <motion.div variants={itemVariants} className="clay-element p-4 sm:p-6 min-h-[300px]">
-        <h2 className="text-xl sm:text-2xl font-semibold text-[var(--clay-text)] mb-6">Span Timeline</h2>
+        <h2 className="text-xl sm:text-2xl font-semibold text-[var(--clay-text)] mb-6">Span Timeline (Vertical List)</h2>
         <TraceTimeline trace={currentTrace} onSpanSelect={handleSelectSpan} />
       </motion.div>
 
@@ -209,7 +231,7 @@ const TraceDetailPage: React.FC = () => {
       >
         {isFetchingSummary && <div className="flex justify-center p-4"><LoadingSpinner message="Generating summary..."/></div>}
         {summaryData && !isFetchingSummary && (
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--clay-text)]">{summaryData.summary}</div>
+          <MarkdownRenderer content={summaryData.summary} />
         )}
         {pageError && isSummaryModalOpen && <ErrorMessage error={pageError} onClear={() => setPageError(null)}/>}
       </Modal>
@@ -222,9 +244,20 @@ const TraceDetailPage: React.FC = () => {
       >
         {isFetchingOptimizationTips && <div className="flex justify-center p-4"><LoadingSpinner message="Generating optimization tips..."/></div>}
         {optimizationTipsData && !isFetchingOptimizationTips && (
-          <pre className="whitespace-pre-wrap bg-[var(--clay-bg-darker)] p-3 rounded-lg text-sm font-mono text-[var(--clay-text)] clay-inset-sm">{optimizationTipsData.tips}</pre>
+          <MarkdownRenderer content={optimizationTipsData.tips} />
         )}
         {pageError && isOptimizationModalOpen && <ErrorMessage error={pageError} onClear={() => setPageError(null)}/>}
+      </Modal>
+
+      <Modal // New Modal for Jaeger Timeline
+        isOpen={isJaegerTimelineModalOpen}
+        onClose={() => setIsJaegerTimelineModalOpen(false)}
+        title={`Gantt View: Trace ${currentTrace.traceID.substring(0,8)}...`}
+        size="fullContent" // Changed from "full" to "fullContent"
+      >
+        {currentTrace && (
+          <JaegerTimelineView trace={currentTrace} onSpanSelect={handleSelectSpan} />
+        )}
       </Modal>
     </motion.div>
   );
