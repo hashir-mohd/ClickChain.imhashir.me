@@ -1,11 +1,12 @@
+
 import React, { useState } from 'react';
-import { Span, ApiError, GeminiResourcesResponse, GeminiFixResponse, GeminiOptimizeResponse, GeminiExplainResponse } from '../types';
+import { Span, ApiError, GeminiResourcesResponse, GeminiFixResponse, GeminiOptimizeResponse, GeminiExplainResponse, SpanException } from '../types';
 import * as apiService from '../services/apiService';
 import Modal from './Modal'; 
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from './ErrorMessage';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GENERIC_OPTIMIZATION_CONTEXT } from '../constants';
+// GENERIC_OPTIMIZATION_CONTEXT import removed as it's no longer used here
 
 interface SpanDetailViewProps {
   span: Span | null;
@@ -71,8 +72,11 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
 
   if (!span) return null;
 
-  const isErrorSpan = span.tags.error === true || span.tags['otel.status_code'] === 'ERROR';
+  const isErrorSpan = span.tags.error === true || 
+                      String(span.tags.error).toLowerCase() === 'true' || 
+                      span.tags['otel.status_code'] === 'ERROR';
   const errorMessageForGemini = span.tags['otel.status_description'] || span.errorContext || (isErrorSpan ? 'An unspecified error occurred in this span.' : '');
+  const currentSpanExceptions = span.exceptions && span.exceptions.length > 0 ? span.exceptions : undefined;
 
   const handleGeminiAction = async (action: () => Promise<any>, title: string) => {
     setIsLoadingGemini(true);
@@ -95,7 +99,7 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
         );
       } else if (typeof result.fix === 'string') {
         setGeminiResponse(<pre className="whitespace-pre-wrap bg-[var(--clay-bg-darker)] p-3 rounded-lg text-xs font-mono text-[var(--clay-text)] clay-inset-sm">{ (result as GeminiFixResponse).fix }</pre>);
-      } else if (typeof result.tips === 'string') {
+      } else if (typeof result.tips === 'string') { // This case will now be handled by TraceDetailPage
         setGeminiResponse(<pre className="whitespace-pre-wrap bg-[var(--clay-bg-darker)] p-3 rounded-lg text-xs font-mono text-[var(--clay-text)] clay-inset-sm">{ (result as GeminiOptimizeResponse).tips }</pre>);
       } else if (typeof result.explanation === 'string') {
         setGeminiResponse(<p className="whitespace-pre-wrap text-[var(--clay-text)]">{ (result as GeminiExplainResponse).explanation }</p>);
@@ -112,10 +116,7 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
 
   const canGetErrorResources = isErrorSpan || !!span.errorContext;
   const canGetErrorFix = !!span.errorContext;
-  const canExplainError = !!span.tags['otel.status_description'] || !!span.errorContext;
-
-  const optimizationContext = span.errorContext || `${span.operationName} (Duration: ${formatDurationDetail(span.duration)})` || GENERIC_OPTIMIZATION_CONTEXT;
-
+  const canExplainError = !!span.tags['otel.status_description'] || !!span.errorContext || isErrorSpan;
 
   const sidebarVariants = {
     closed: { x: "100%", opacity: 0.8 },
@@ -211,10 +212,24 @@ const SpanDetailView: React.FC<SpanDetailViewProps> = ({ span, traceId, isOpen, 
             <Section title="Gemini AI Actions" defaultOpen={true}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
                 {[
-                  { label: "Get Error Resources", action: () => apiService.getErrorResources(errorMessageForGemini), disabled: !canGetErrorResources || isLoadingGemini, color: "bg-[var(--clay-accent-info)] hover:bg-[var(--clay-accent-info)]/80" },
-                  { label: "Get Error Fix", action: () => apiService.getErrorFix(span.errorContext || "No specific context for fix"), disabled: !canGetErrorFix || isLoadingGemini, color: "bg-[var(--clay-accent-success)] hover:bg-[var(--clay-accent-success)]/80" },
-                  { label: "Get Optimization Tips", action: () => apiService.getOptimizationTips(optimizationContext), disabled: isLoadingGemini, color: "bg-[var(--clay-accent-secondary)] hover:bg-[var(--clay-accent-secondary)]/80" },
-                  { label: "Explain Error", action: () => apiService.explainError(errorMessageForGemini), disabled: !canExplainError || isLoadingGemini, color: "bg-[var(--clay-accent-error)] hover:bg-[var(--clay-accent-error)]/80" }
+                  { 
+                    label: "Get Error Resources", 
+                    action: () => apiService.getErrorResources({ errorMessage: errorMessageForGemini, exceptions: currentSpanExceptions }), 
+                    disabled: !canGetErrorResources || isLoadingGemini, 
+                    color: "bg-[var(--clay-accent-info)] hover:bg-[var(--clay-accent-info)]/80" 
+                  },
+                  { 
+                    label: "Get Error Fix", 
+                    action: () => apiService.getErrorFix({ errorContext: span.errorContext || "No specific context for fix", exceptions: currentSpanExceptions }), 
+                    disabled: !canGetErrorFix || isLoadingGemini, 
+                    color: "bg-[var(--clay-accent-success)] hover:bg-[var(--clay-accent-success)]/80" 
+                  },
+                  { 
+                    label: "Explain Error", 
+                    action: () => apiService.explainError({ errorMessage: errorMessageForGemini, exceptions: currentSpanExceptions }), 
+                    disabled: !canExplainError || isLoadingGemini, 
+                    color: "bg-[var(--clay-accent-error)] hover:bg-[var(--clay-accent-error)]/80" 
+                  }
                 ].map(btn => (
                   <motion.button
                     key={btn.label}

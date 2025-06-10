@@ -12,7 +12,7 @@ const ZapIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 );
 const SparklesIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L1.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.25 12L17 14.25l-1.25-2.25L13.5 11l2.25-1.25L17 7.5l1.25 2.25L20.5 11l-2.25 1.25z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L1.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846-.813a4.5 4.5 0 00-3.09 3.09zM18.25 12L17 14.25l-1.25-2.25L13.5 11l2.25-1.25L17 7.5l1.25 2.25L20.5 11l-2.25 1.25z" />
   </svg>
 );
 const EyeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -54,17 +54,17 @@ const LearningIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
 
 interface Particle {
   id: string;
-  x: string; // percentage
-  y: string; // percentage
+  x: string; 
+  y: string; 
   size: number;
   color: string;
   opacity: number;
-  type: 'dot' | 'circle' | 'square'; // Simplified types
+  type: 'dot' | 'circle' | 'square';
 }
 
 const generateParticles = (count: number, type: Particle['type'], color: string, sizeRange: [number, number], opacityRange: [number, number]): Particle[] => {
   return Array.from({ length: count }).map((_, i) => ({
-    id: `${type}-${i}-${Math.random().toString(36).substring(7)}`, // Ensure more unique ID
+    id: `${type}-${i}-${Math.random().toString(36).substring(7)}`,
     x: `${Math.random() * 100}%`,
     y: `${Math.random() * 100}%`,
     size: Math.random() * (sizeRange[1] - sizeRange[0]) + sizeRange[0],
@@ -109,7 +109,6 @@ const LandingPage: React.FC = () => {
     controls.start("visible");
   }, [controls]);
 
-  // Parallax layers
   const parallaxLayer1Particles = useMemo(() => generateParticles(50, 'dot', 'var(--clay-dark-text-secondary)', [1, 3], [0.1, 0.3]), []);
   const parallaxLayer2Particles = useMemo(() => generateParticles(30, 'circle', 'var(--clay-dark-lp-accent-teal)', [3, 6], [0.2, 0.5]), []);
   const parallaxLayer3Particles = useMemo(() => generateParticles(20, 'square', 'var(--clay-dark-lp-accent-magenta)', [5, 10], [0.3, 0.6]), []);
@@ -173,7 +172,6 @@ const LandingPage: React.FC = () => {
       initial="hidden"
       animate={controls}
     >
-      {/* Header */}
       <motion.header 
          className={`sticky top-0 z-50 transition-all duration-300 ${isNavScrolled ? 'py-3 bg-[var(--clay-dark-element-bg)]/80 backdrop-blur-lg dark-clay-lp-element-sm-shadow !rounded-none !rounded-b-xl' : 'py-5 bg-transparent'}`}
       >
@@ -203,14 +201,12 @@ const LandingPage: React.FC = () => {
         </div>
       </motion.header>
 
-      {/* Hero Section */}
       <motion.section
         ref={heroRef}
         onMouseMove={handleMouseMove}
         className="relative flex-grow flex items-center justify-center py-20 md:py-32 overflow-hidden min-h-[calc(100vh-80px)]"
         variants={sectionVariants}
       >
-        {/* Parallax Background Layers */}
         {[
           { particles: parallaxLayer1Particles, x: layer1X, y: layer1Y, zIndex: 1, keyPrefix: 'layer1-dots' },
           { particles: parallaxLayer2Particles, x: layer2X, y: layer2Y, zIndex: 2, keyPrefix: 'layer2-circles' },
@@ -218,7 +214,7 @@ const LandingPage: React.FC = () => {
         ].map((pLayerConfig) => (
           <motion.div
             key={`parallax-${pLayerConfig.keyPrefix}`}
-            className="absolute inset-0 pointer-events-none" // pointer-events-none so it doesn't interfere with text selection
+            className="absolute inset-0 pointer-events-none"
             style={{ x: pLayerConfig.x, y: pLayerConfig.y, zIndex: pLayerConfig.zIndex }}
           >
             {pLayerConfig.particles.map(particle => (
@@ -259,12 +255,12 @@ const LandingPage: React.FC = () => {
             Transform raw telemetry data into actionable understanding with our intelligent trace visualizer and integrated Gemini AI assistant.
           </motion.p>
           <motion.div variants={itemVariants} className="space-x-4">
-            <Link 
-              to="#features"
+            <a 
+              href="#features"
               className="px-8 py-4 bg-[var(--clay-dark-lp-accent-teal)] text-[var(--clay-dark-bg)] text-lg font-semibold rounded-xl dark-clay-lp-element-sm-shadow hover:brightness-110 transition-all duration-200 transform hover:scale-105 hover:shadow-[0_0_25px_var(--clay-dark-lp-accent-teal_/_60%)]"
             >
               Discover Features
-            </Link>
+            </a>
             <Link 
               to="/app"
               className="px-8 py-4 bg-[var(--clay-dark-element-bg)] text-[var(--clay-dark-lp-accent-sky-blue)] text-lg font-semibold rounded-xl dark-clay-lp-element-sm-shadow hover:bg-[var(--clay-dark-bg)] border-2 border-[var(--clay-dark-lp-accent-sky-blue)] transition-all duration-200 transform hover:scale-105 hover:shadow-[0_0_20px_var(--clay-dark-lp-accent-sky-blue_/_40%)]"
@@ -275,7 +271,6 @@ const LandingPage: React.FC = () => {
         </div>
       </motion.section>
 
-      {/* Features Section */}
       <motion.section 
         id="features" 
         variants={sectionVariants}
@@ -311,7 +306,6 @@ const LandingPage: React.FC = () => {
         </div>
       </motion.section>
       
-      {/* Benefits Section */}
       <motion.section id="benefits" variants={sectionVariants} className="py-16 sm:py-24">
         <div className="container mx-auto px-6 lg:px-8">
             <motion.h2 variants={itemVariants} className="text-3xl sm:text-4xl font-bold text-center mb-16">
@@ -339,7 +333,6 @@ const LandingPage: React.FC = () => {
         </div>
       </motion.section>
 
-      {/* Visualize Performance Section */}
       <motion.section 
         id="visualize"
         variants={sectionVariants}
@@ -356,7 +349,6 @@ const LandingPage: React.FC = () => {
         </div>
       </motion.section>
 
-      {/* Final CTA Section */}
       <motion.section variants={sectionVariants} className="py-20 sm:py-28 text-center">
         <div className="container mx-auto px-6 lg:px-8">
           <motion.h2 variants={itemVariants} className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-6">
@@ -377,7 +369,6 @@ const LandingPage: React.FC = () => {
         </div>
       </motion.section>
 
-      {/* Footer */}
       <motion.footer 
         variants={itemVariants} 
         className="text-center p-8 text-sm text-[var(--clay-dark-text-secondary)] border-t border-[var(--clay-dark-element-bg)]/50 mt-auto"

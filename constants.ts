@@ -1,17 +1,14 @@
 
 import { Service } from './types';
 
-export const MOCK_SERVICES: Service[] = [
-  { id: 'auth', name: 'AuthenticationService' },
-  { id: 'catalog', name: 'ProductCatalog' },
-  { id: 'payment', name: 'PaymentGateway' },
-  { id: 'inventory', name: 'InventoryService' },
-  { id: 'shipping', name: 'ShippingService' },
-];
+// API_BASE_URL should ideally be configured via an environment variable.
+// For this setup, we'll use a relative path, assuming the frontend is served
+// from the same origin as the backend, or a proxy is configured.
+// In a typical build setup (e.g., with Create React App or Vite), this might be
+// process.env.REACT_APP_API_URL or import.meta.env.VITE_API_URL.
+export const API_BASE_URL = 'http://localhost:3000'; // Relative to the host
 
-export const API_BASE_URL = '/api/gemini'; // As specified in the prompt
-
-export const GENERIC_OPTIMIZATION_CONTEXT = "General performance optimization for this operation.";
+// GENERIC_OPTIMIZATION_CONTEXT removed as it's no longer used for the refactored optimization tips.
 
 export const CHAT_WELCOME_MESSAGE = "Hello! I'm your Gemini assistant. How can I help you with these traces?";
 

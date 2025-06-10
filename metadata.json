@@ -1,5 +1,5 @@
 {
-  "name": "OpenTelemetry Trace Visualizer & Gemini Assistant",
+  "name": "clickchainfrontend",
   "description": "A React application for visualizing OpenTelemetry traces with a Gemini-powered AI assistant. Designed for students to understand trace flows, identify errors, and get AI-driven insights and solutions.",
   "requestFramePermissions": [],
   "prompt": ""

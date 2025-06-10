@@ -1,7 +1,7 @@
 
-import React, { createContext, useState, useContext, ReactNode, useCallback } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
 import { Trace, Service, ChatMessage, ApiError, ErrorHeatmapDataItem, ErrorStatsData } from '../types';
-import { MOCK_SERVICES } from '../constants';
+// import { MOCK_SERVICES } from '../constants'; // Removed MOCK_SERVICES
 import * as apiService from '../services/apiService';
 
 interface AppContextType {
@@ -12,9 +12,9 @@ interface AppContextType {
   setTraces: React.Dispatch<React.SetStateAction<Trace[]>>;
   currentTrace: Trace | null;
   setCurrentTraceById: (traceId: string | null) => void;
-  isLoading: boolean;
+  isLoading: boolean; // For traces and single trace fetch
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
-  error: ApiError | null;
+  error: ApiError | null; // For traces and single trace fetch
   setError: React.Dispatch<React.SetStateAction<ApiError | null>>;
   fetchTraces: (serviceId: string) => Promise<void>;
   chatMessages: ChatMessage[];
@@ -33,17 +33,26 @@ interface AppContextType {
   fetchErrorAnalyticsData: () => Promise<void>;
   analyticsError: ApiError | null;
   clearAnalyticsError: () => void;
+
+  // Services specific state
+  isLoadingServices: boolean;
+  servicesError: ApiError | null;
+  fetchServices: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [services] = useState<Service[]>(MOCK_SERVICES);
+  const [services, setServices] = useState<Service[]>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState<boolean>(true);
+  const [servicesError, setServicesError] = useState<ApiError | null>(null);
+
   const [selectedService, setSelectedServiceState] = useState<Service | null>(null);
   const [traces, setTraces] = useState<Trace[]>([]);
   const [currentTrace, setCurrentTraceState] = useState<Trace | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false); 
+  const [error, setError] = useState<ApiError | null>(null); 
+  
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
@@ -58,29 +67,80 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const clearError = useCallback(() => setError(null), []);
   const clearAnalyticsError = useCallback(() => setAnalyticsError(null), []);
+  const clearServicesError = useCallback(() => setServicesError(null), []);
+
+  const fetchServicesCallback = useCallback(async () => {
+    setIsLoadingServices(true);
+    clearServicesError();
+    try {
+      const fetchedServices = await apiService.fetchServices();
+      setServices(fetchedServices);
+    } catch (err) {
+      setServicesError({ message: (err as Error).message || 'Failed to fetch services' });
+      setServices([]);
+    } finally {
+      setIsLoadingServices(false);
+    }
+  }, [clearServicesError]); 
+
+  useEffect(() => {
+    fetchServicesCallback();
+  }, [fetchServicesCallback]);
+
 
   const setSelectedService = (service: Service | null) => {
     setSelectedServiceState(service);
-    setTraces([]); 
-    setCurrentTraceState(null); 
+    setTraces([]);
+    setCurrentTraceState(null);
     clearError();
   };
-  
-  const setCurrentTraceById = useCallback((traceId: string | null) => {
+
+  const setCurrentTraceById = useCallback(async (traceId: string | null) => {
+    clearError();
     if (!traceId) {
       setCurrentTraceState(null);
       return;
     }
-    const trace = traces.find(t => t.traceID === traceId);
-    setCurrentTraceState(trace || null);
-    clearError();
-  }, [traces, clearError]);
+
+    // Always fetch the trace from the API when a traceId is provided
+    setIsLoading(true);
+    setError(null); // Clear previous errors before new fetch
+    try {
+      const fetchedTrace = await apiService.fetchTraceById(traceId);
+      setCurrentTraceState(fetchedTrace);
+      if (!fetchedTrace) {
+         setError({ message: `Trace with ID ${traceId} not found.` });
+      }
+      // Optionally, if you want to update the main 'traces' list when a single trace is fetched:
+      // This can be useful if you want the trace to be "cached" in the list after being viewed once.
+      // if (fetchedTrace) {
+      //   setTraces(prevTraces => {
+      //     const existingIndex = prevTraces.findIndex(t => t.traceID === fetchedTrace.traceID);
+      //     if (existingIndex > -1) {
+      //       const updatedTraces = [...prevTraces];
+      //       updatedTraces[existingIndex] = fetchedTrace; // Update existing
+      //       return updatedTraces;
+      //     }
+      //     return [...prevTraces, fetchedTrace]; // Add if new
+      //   });
+      // }
+    } catch (err) {
+      setError({ message: (err as Error).message || `Failed to fetch trace ${traceId}` });
+      setCurrentTraceState(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [clearError]);
 
   const fetchTraces = async (serviceId: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      const fetchedTraces = await apiService.fetchTracesForService(serviceId);
+      const service = services.find(s => s.id === serviceId);
+      if (!service) {
+        throw new Error(`Service with id ${serviceId} not found.`);
+      }
+      const fetchedTraces = await apiService.fetchTracesForService(service.name); 
       setTraces(fetchedTraces);
     } catch (err) {
       setError({ message: (err as Error).message || 'Failed to fetch traces' });
@@ -98,18 +158,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsAnalyticsLoading(true);
     setAnalyticsError(null);
     try {
-      const [heatmapRes, statsRes, topErrorsRes] = await Promise.all([
-        apiService.fetchErrorHeatmapData(),
-        apiService.fetchErrorStats(),
-        apiService.fetchTopErrors(5) // Fetch top 5 errors for pie chart
-      ]);
-      
+      const heatmapRes = await apiService.fetchErrorHeatmapData();
       if (heatmapRes.success) setErrorHeatmapData(heatmapRes.data);
       else throw new Error(heatmapRes.message || 'Failed to fetch heatmap data');
       
+      const statsRes = await apiService.fetchErrorStats();
       if (statsRes.success) setErrorStats(statsRes.data);
       else throw new Error(statsRes.message || 'Failed to fetch error stats');
 
+      const topErrorsRes = await apiService.fetchTopErrors(5);
       if (topErrorsRes.success) setTopErrors(topErrorsRes.data);
       else throw new Error(topErrorsRes.message || 'Failed to fetch top errors');
 
@@ -121,7 +178,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } finally {
       setIsAnalyticsLoading(false);
     }
-  }, [setIsAnalyticsLoading, setAnalyticsError, setErrorHeatmapData, setErrorStats, setTopErrors]); // Add setters if needed, though usually not for stable setters
+  }, []);
 
   return (
     <AppContext.Provider value={{
@@ -152,6 +209,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       fetchErrorAnalyticsData,
       analyticsError,
       clearAnalyticsError,
+      // Services
+      isLoadingServices,
+      servicesError,
+      fetchServices: fetchServicesCallback,
     }}>
       {children}
     </AppContext.Provider>

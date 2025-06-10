@@ -1,150 +1,301 @@
 
-import { 
-  Trace, 
-  GeminiSummaryResponse, 
-  GeminiChatRequest, 
-  GeminiChatApiResponse, 
-  GeminiResourcesResponse, 
-  GeminiFixResponse, 
-  GeminiOptimizeResponse, 
-  GeminiExplainResponse, 
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+import {
+  Trace,
+  Service,
+  Span, 
+  SpanException, 
+  GeminiSummaryResponse,
+  GeminiChatRequest,
+  GeminiChatApiResponse,
+  GeminiResourcesResponse,
+  GeminiFixResponse,
+  GeminiOptimizeResponse,
+  GeminiExplainResponse,
   ApiError,
   ErrorHeatmapResponse,
   ErrorStatsResponse,
-  TopErrorsResponse,
-  ErrorHeatmapDataItem
+  TopErrorsResponse
 } from '../types';
-import { MOCK_TRACES } from '../data/mockTraces';
 import { API_BASE_URL } from '../constants';
 
-// Helper to simulate API calls
-const mockApiCall = <T,>(data: T, delay: number = 800, failRate: number = 0): Promise<T> => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() < failRate) {
-        reject(new Error('Simulated API Error: The operation failed. Please try again.'));
-      } else {
-        resolve(data);
-      }
-    }, delay);
-  });
-};
-
-// This is a mock for the frontend. In a real app, this would fetch from /api/traces or similar.
-export const fetchTracesForService = async (serviceId: string): Promise<Trace[]> => {
-  console.log(`Fetching traces for service: ${serviceId}`);
-  const serviceTraceMap: Record<string, number[]> = {
-    'auth': [0],
-    'catalog': [1],
-    'payment': [2],
-    'inventory': [3],
-    'shipping': [4],
+// Generic API fetch helper using axios
+const fetchApi = async <TResponse>(
+  path: string, // Full path e.g., /api/traces or /api/summary
+  method: string = 'GET',
+  body?: any
+): Promise<TResponse> => {
+  const config: AxiosRequestConfig = {
+    method: method.toUpperCase(),
+    url: `${API_BASE_URL}${path}`,
+    headers: {
+      'Content-Type': 'application/json',
+      // Authorization: `Bearer ${getAuthToken()}` // Placeholder for auth token if needed
+    },
   };
-  const indices = serviceTraceMap[serviceId] || [0,1,2,3,4];
-  const tracesToShow = indices.map(i => MOCK_TRACES[i]).filter(Boolean);
-  return mockApiCall(tracesToShow.length > 0 ? tracesToShow : MOCK_TRACES.slice(0,2) , 500);
-};
 
-const postToGeminiApi = async <ReqBody, ResBody>(endpoint: string, body: ReqBody): Promise<ResBody> => {
+  if (body && (config.method === 'POST' || config.method === 'PUT' || config.method === 'PATCH')) {
+    config.data = body;
+  }
+
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
-      throw { message: errorData.message || `API Error: ${response.statusText}`, status: response.status } as ApiError;
+    const response = await axios(config);
+    // Axios returns data directly. For 204 No Content, response.data might be null or empty.
+    // The original fetchApi returned undefined for 204. We'll try to match that if needed,
+    // but for most cases, response.data is what we want.
+    if (response.status === 204) {
+      return undefined as unknown as TResponse;
     }
-    return await response.json() as ResBody;
+    return response.data as TResponse;
   } catch (error) {
-    console.error(`Error calling ${endpoint}:`, error);
-    if ((error as ApiError).message) throw error;
-    throw { message: `Network or simulated API error for ${endpoint}. Check console.` } as ApiError;
+    const axiosError = error as AxiosError<any>;
+    let apiError: ApiError;
+
+    if (axiosError.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      const message = axiosError.response.data?.message || 
+                      (typeof axiosError.response.data === 'string' ? axiosError.response.data : null) || // Handle plain string error response
+                      axiosError.response.statusText || 
+                      `Request failed with status ${axiosError.response.status}`;
+      apiError = { message, status: axiosError.response.status };
+    } else if (axiosError.request) {
+      // The request was made but no response was received
+      apiError = { message: 'Network error: No response received from server.' };
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      apiError = { message: axiosError.message || 'An unexpected error occurred setting up the request.' };
+    }
+    
+    console.error(`API Error for ${method} ${path}:`, { 
+      message: apiError.message, 
+      status: apiError.status, 
+      axiosErrorMessage: axiosError.message,
+      responseData: axiosError.response?.data 
+    });
+    throw apiError;
   }
 };
 
-// Mock implementations for Gemini features
+
+// Jaeger/Trace related APIs
+export const fetchServices = async (): Promise<Service[]> => {
+  // Define the expected response structure from the backend for /api/services
+  type BackendServicesEnvelope = {
+    success: boolean;
+    data: {
+      data: string[]; // This is the array of service names
+      total: number;
+      limit: number;
+      offset: number;
+      errors: any | null; // Or a more specific error type if known
+    };
+    message?: string; // Message might be optional
+  };
+
+  const response = await fetchApi<BackendServicesEnvelope>('/api/services');
+
+  if (response.success && response.data && Array.isArray(response.data.data)) {
+    const serviceNames: string[] = response.data.data;
+    // Transform the array of service name strings into an array of Service objects
+    return serviceNames.map(name => ({
+      id: name, // Use the service name as the ID for simplicity
+      name: name
+    }));
+  }
+  
+  let errorMessage = 'Failed to fetch services: Response was not successful or data format is incorrect.';
+  if (!response.success && response.message) {
+    errorMessage = `Failed to fetch services: ${response.message}`;
+  } else if (response.data && response.data.errors) {
+    errorMessage = `Failed to fetch services: API returned errors: ${JSON.stringify(response.data.errors)}`;
+  } else if (!response.success) {
+    errorMessage = `Failed to fetch services: Backend indicated failure.`;
+  }
+
+  console.error('Error fetching services, raw response:', response);
+  throw new Error(errorMessage);
+};
+
+// Define the raw trace structure as received from backend (with microsecond timestamps)
+interface RawSpanException {
+  timestamp: number; // microseconds
+  'exception.type': string;
+  'exception.message': string;
+  'exception.stacktrace': string;
+}
+
+interface RawSpan {
+  spanID: string;
+  operationName: string;
+  startTime: number; // microseconds
+  duration: number; // microseconds
+  tags: any; 
+  errorContext?: string;
+  exceptions?: RawSpanException[];
+}
+
+interface RawTrace {
+  traceID: string;
+  spans: RawSpan[];
+}
+
+// Helper to transform a single RawTrace to Trace (with timestamp conversion)
+const transformRawTraceToTrace = (rawTrace: RawTrace): Trace => {
+  const transformedSpans = rawTrace.spans.map((rawSpan: RawSpan): Span => {
+    const transformedExceptions = rawSpan.exceptions?.map((rawEx: RawSpanException): SpanException => ({
+      ...rawEx,
+      timestamp: Math.floor(rawEx.timestamp / 1000), // Convert micro to milli
+    }));
+    return {
+      ...rawSpan,
+      startTime: Math.floor(rawSpan.startTime / 1000), // Convert micro to milli
+      // duration is already in microseconds, matching the Span type definition
+      tags: rawSpan.tags, 
+      exceptions: transformedExceptions,
+    } as Span; 
+  });
+  return {
+    traceID: rawTrace.traceID,
+    spans: transformedSpans,
+  };
+};
+
+
+export const fetchTracesForService = async (serviceName: string): Promise<Trace[]> => {
+  type BackendTracesEnvelope = {
+    success: boolean;
+    data: RawTrace[]; 
+    message?: string;
+  };
+
+  const response = await fetchApi<BackendTracesEnvelope>(`/api/traces?service=${encodeURIComponent(serviceName)}`);
+
+  if (response.success && Array.isArray(response.data)) {
+    return response.data.map(transformRawTraceToTrace);
+  }
+  
+  let errorMessage = `Failed to fetch traces for ${serviceName}: Response was not successful or data format is incorrect.`;
+  if (!response.success && response.message) {
+      errorMessage = `Failed to fetch traces for ${serviceName}: ${response.message}`;
+  }
+  console.error(`Error fetching traces for ${serviceName}, raw response:`, response);
+  throw new Error(errorMessage);
+};
+
+export const fetchTraceById = async (traceID: string): Promise<Trace | null> => {
+  type BackendSingleTraceEnvelope = {
+    success: boolean;
+    data: RawTrace[]; // Backend returns an array with a single trace
+    message?: string;
+  };
+
+  try {
+    const response = await fetchApi<BackendSingleTraceEnvelope>(`/api/traces/${traceID}`);
+
+    if (response.success && Array.isArray(response.data) && response.data.length > 0) {
+      const rawTrace = response.data[0];
+      return transformRawTraceToTrace(rawTrace);
+    } else if (response.success && Array.isArray(response.data) && response.data.length === 0) {
+      // Trace not found by ID, but API call was successful
+      console.warn(`Trace with ID ${traceID} not found. API returned empty data array.`);
+      return null;
+    }
+    
+    let errorMessage = `Failed to fetch trace ${traceID}: Response was not successful or data format is incorrect.`;
+    if (!response.success && response.message) {
+        errorMessage = `Failed to fetch trace ${traceID}: ${response.message}`;
+    }
+    console.error(`Error fetching trace ${traceID}, raw response:`, response);
+    throw new Error(errorMessage);
+
+  } catch (error) {
+    // This catch block handles errors from fetchApi (network issues, non-2xx responses)
+    // and errors thrown from within the try block (e.g., custom error messages)
+    console.error(`Failed to fetch trace ${traceID}:`, error);
+    // Re-throw the error so it can be caught by the caller in AppContext
+    // Ensure it's an ApiError or a generic Error
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+        throw error;
+    }
+    throw new Error(`An unexpected error occurred while fetching trace ${traceID}.`);
+  }
+};
+
+
+// Gemini related APIs
 export const getTraceSummary = async (trace: Trace): Promise<GeminiSummaryResponse> => {
-  return mockApiCall({ summary: `Mock Summary: Trace ${trace.traceID} involves ${trace.spans.length} spans. The primary operation is '${trace.spans[0]?.operationName || 'unknown'}'. ${trace.spans.some(s => s.tags.error) ? 'Errors were detected.' : 'No errors detected.'}` });
+  const summaryResponse = await fetchApi<GeminiSummaryResponse>('/api/summary', 'POST', { trace });
+  if (summaryResponse && typeof summaryResponse.summary === 'string') {
+    return summaryResponse;
+  } else {
+    console.error('Invalid summary response format from server:', summaryResponse);
+    throw new Error('Failed to get trace summary: Invalid response format from server.');
+  }
 };
 
 export const postChatMessage = async (request: GeminiChatRequest): Promise<GeminiChatApiResponse> => {
-  const newConversationId = request.conversationId || `conv-${Date.now()}`;
-  return mockApiCall({
-    success: true,
-    data: {
-      conversationId: newConversationId,
-      prompt: request.prompt,
-      response: `Gemini Mock: Thanks for asking about "${request.prompt}". ${request.traceId ? `Context trace: ${request.traceId}. ` : ''}Here's a helpful thought: The key to understanding distributed systems is to visualize the flow of requests.`,
-      conversationLength: (Math.random() * 5 | 0) + 1 ,
-    }
-  });
+  return fetchApi<GeminiChatApiResponse>('/api/chat', 'POST', request);
 };
 
-export const getErrorResources = async (errorMessage: string): Promise<GeminiResourcesResponse> => {
-  return mockApiCall({
-    links: [
-      { title: `Mock Doc for: ${errorMessage}`, link: '#', snippet: 'This is a helpful snippet about solving the error.'},
-      { title: 'General Debugging Tips', link: '#', snippet: 'Check logs, verify configurations, and ensure dependencies are up.'},
-    ]
-  });
+export interface ErrorResourcesRequest {
+  errorMessage: string;
+  exceptions?: SpanException[];
+}
+export const getErrorResources = async (payload: ErrorResourcesRequest): Promise<GeminiResourcesResponse> => {
+  const response = await fetchApi<GeminiResourcesResponse>('/api/resources', 'POST', payload);
+  if (response && Array.isArray(response.links)) {
+    return response;
+  }
+  console.error('Invalid resources response format from server:', response);
+  throw new Error('Failed to get error resources: Invalid response format from server.');
 };
 
-export const getErrorFix = async (errorContext: string): Promise<GeminiFixResponse> => {
-  return mockApiCall({ fix: `Mock Fix for "${errorContext}":\n1. Check database connection string.\n2. Ensure the service has permissions.\n3. Restart the related pod.` });
+export interface ErrorFixRequest {
+  errorContext: string;
+  exceptions?: SpanException[];
+}
+export const getErrorFix = async (payload: ErrorFixRequest): Promise<GeminiFixResponse> => {
+  const response = await fetchApi<GeminiFixResponse>('/api/fix', 'POST', payload);
+  if (response && typeof response.fix === 'string') {
+    return response;
+  }
+  console.error('Invalid fix response format from server:', response);
+  throw new Error('Failed to get error fix: Invalid response format from server.');
 };
 
-export const getOptimizationTips = async (errorContext: string): Promise<GeminiOptimizeResponse> => {
-  return mockApiCall({ tips: `Mock Optimization for "${errorContext}":\n- Consider adding caching for frequently accessed data.\n- Profile the code section to identify specific bottlenecks.\n- Parallelize independent tasks if possible.` });
+export const getOptimizationTips = async (trace: Trace): Promise<GeminiOptimizeResponse> => {
+  const response = await fetchApi<GeminiOptimizeResponse>('/api/optimize', 'POST', { trace });
+   if (response && typeof response.tips === 'string') {
+    return response;
+  }
+  console.error('Invalid optimization tips response format from server:', response);
+  throw new Error('Failed to get optimization tips: Invalid response format from server.');
 };
 
-export const explainError = async (errorMessage: string): Promise<GeminiExplainResponse> => {
-  return mockApiCall({ explanation: `Mock Explanation for "${errorMessage}": This error typically occurs when a downstream service is unavailable or returns an unexpected response. It might also indicate a network connectivity issue or a misconfiguration in the service itself.` });
+export interface ExplainErrorRequest {
+  errorMessage: string;
+  exceptions?: SpanException[];
+}
+export const explainError = async (payload: ExplainErrorRequest): Promise<GeminiExplainResponse> => {
+  const response = await fetchApi<GeminiExplainResponse>('/api/explain', 'POST', payload);
+  if (response && typeof response.explanation === 'string') {
+    return response;
+  }
+  console.error('Invalid explanation response format from server:', response);
+  throw new Error('Failed to explain error: Invalid response format from server.');
 };
 
-// New Mock API calls for Error Analytics
-// In a real app, these would call GET `${API_BASE_URL}/error-heatmap` etc.
-const mockErrorData: ErrorHeatmapDataItem[] = [
-  { error: 'NullPointerException', frequency: 152, percentage: "30.40" },
-  { error: 'TimeoutException', frequency: 101, percentage: "20.20" },
-  { error: 'IllegalArgumentException', frequency: 85, percentage: "17.00" },
-  { error: 'DBConnectionError', frequency: 73, percentage: "14.60" },
-  { error: 'AuthFailure', frequency: 51, percentage: "10.20" },
-  { error: 'OutOfMemoryError', frequency: 28, percentage: "5.60" },
-  { error: 'FileNotFoundException', frequency: 10, percentage: "2.00" },
-];
-const totalMockErrors = mockErrorData.reduce((sum, item) => sum + item.frequency, 0);
 
+// Error Analytics APIs
 export const fetchErrorHeatmapData = async (): Promise<ErrorHeatmapResponse> => {
-  return mockApiCall({
-    success: true,
-    data: mockErrorData.map(item => ({...item, percentage: ((item.frequency / totalMockErrors) * 100).toFixed(2) }) ),
-    totalErrors: totalMockErrors,
-    message: 'Error heatmap data fetched successfully'
-  }, 1000);
+  return fetchApi<ErrorHeatmapResponse>('/api/heatmap/errors');
 };
 
 export const fetchErrorStats = async (): Promise<ErrorStatsResponse> => {
-  const frequencies = mockErrorData.map(e => e.frequency);
-  return mockApiCall({
-    success: true,
-    data: {
-      totalUniqueErrors: mockErrorData.length,
-      totalOccurrences: totalMockErrors,
-      avgFrequency: totalMockErrors / mockErrorData.length,
-      maxFrequency: Math.max(...frequencies),
-      minFrequency: Math.min(...frequencies),
-    },
-    message: 'Error statistics fetched successfully'
-  }, 600);
+  return fetchApi<ErrorStatsResponse>('/api/heatmap/stats');
 };
 
 export const fetchTopErrors = async (limit: number = 5): Promise<TopErrorsResponse> => {
-    const sortedErrors = [...mockErrorData].sort((a,b) => b.frequency - a.frequency);
-    return mockApiCall({
-        success: true,
-        data: sortedErrors.slice(0, limit),
-        message: `Top ${limit} errors fetched successfully`
-    }, 700);
+  return fetchApi<TopErrorsResponse>(`/api/heatmap/top-errors?limit=${limit}`);
 };
